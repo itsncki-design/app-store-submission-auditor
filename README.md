@@ -72,5 +72,5 @@ app-store-submission-auditor/
 
 ## Built by
 
-[@yournamehere](https://github.com/yournamehere) — if this helped you ship,
+[@itsncki-design](https://github.com/itsncki-design) — if this helped you ship,
 give it a ⭐ and share it with someone else who's building with AI.
