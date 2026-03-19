@@ -1,4 +1,4 @@
-# App Store Submission Auditor — Claude Skill
+# App Store Submission Auditor
 
 A Claude skill that scans your iOS app for App Store rejection risks before you submit.
 Built for vibe coders and developers alike.
