@@ -1,22 +1,104 @@
 ---
 name: app-store-submission-auditor
 description: >
-  Scans an iOS app's project folder for App Store rejection risks. Reads source code directly —
-  no back-and-forth. Auto-detects whether the user is a vibe coder or technical developer and
-  adapts language accordingly. Detects mid-build apps and asks before switching modes. Outputs
-  a risk register, detailed findings with dynamic copy-paste fixes, reviewer experience
-  checklist, draft App Store Connect reviewer notes, and a manual checklist. Use this skill
-  whenever a user wants to check if their iOS app is ready to submit, says "audit my app",
-  "is my app ready for the App Store", wants a pre-submission scan, mentions App Store review,
-  wants to know what to fix before submitting, or is preparing to launch an iOS app. Also
-  trigger proactively when a user has been building an iOS app and says they're getting close
-  to done or ready to ship.
+  Scans an iOS app project for App Store rejection risks. Reads source code directly —
+  no back-and-forth. Auto-detects vibe coder vs developer and adapts language. Detects
+  mid-build apps and asks before switching modes. Outputs a risk register, detailed findings
+  with dynamic copy-paste fixes, reviewer experience checklist, draft App Store Connect
+  reviewer notes, and a post-scan manual checklist.
+
+  TRIGGER THIS SKILL for any of these — even if not explicitly asked:
+  "audit my app" / "is my app ready" / "about to submit" / "submitting soon" /
+  "about to launch" / "ready to ship" / "App Store review" / "keep getting rejected" /
+  "got rejected" / "rejection" / "App Store Connect" / "TestFlight" / "submit for review" /
+  "pre-submission" / "app review" / "first app" / "never submitted before" /
+  "why did Apple reject" / "what do I need to fix" / "is this ready to launch".
+  Also trigger proactively when working on an iOS app and the user seems close to shipping.
+
+  Flutter/RN stack: load references/flutter-patterns.md.
+  First-time submitter: load references/first-time-dev.md.
 ---
 
 # App Store Submission Auditor
 
 Scans a project folder for App Store rejection risks. No back-and-forth — read the code,
 find the problems, report them. Adapts to the user's level and build state.
+
+---
+
+## First-time developer
+
+If user mentions "first app", "first time submitting", "never submitted before", or
+"new developer" → load `references/first-time-dev.md` and run that checklist first,
+then continue with the full audit below.
+
+---
+
+## Config — check before scanning
+
+Look for `config.json` in the skill directory. If it exists, read it for saved preferences
+(stack, app type, subscription status, EU distribution, previous audit results).
+
+If it does NOT exist, create it after the first audit with what was detected:
+
+```json
+{
+  "mode": "vibe_coder",
+  "stack": "flutter",
+  "has_subscriptions": true,
+  "has_social_features": true,
+  "has_location": true,
+  "eu_distribution": false,
+  "first_time_submitter": false,
+  "last_audit": "2026-03-19",
+  "issues_fixed": []
+}
+```
+
+On subsequent runs: load config, skip re-detection for anything already known, and note
+"Last audit: [date] — you fixed [N] issues since then." if issues_fixed is populated.
+
+---
+
+## Gotchas — common false positives to avoid
+
+These are the things Claude most often gets wrong when running this audit.
+Check these before flagging any issue.
+
+**1. Stripe for physical goods is fine**
+Only flag Stripe/PayPal as a violation if it's being used for digital goods or features.
+Stripe for physical item swaps, marketplace escrow, or real-world services = NOT a violation.
+Only flag if credits/payments unlock in-app digital features.
+
+**2. WebView for help/legal is fine**
+Only flag WebView as a web wrapper if it's the PRIMARY UI. A WebView loading a terms of
+service page, help article, or external link inside an otherwise native app is fine and
+expected. Only flag if fewer than ~5 native screens exist and WebView loads the main content.
+
+**3. NSUserTrackingUsageDescription without tracking SDKs**
+If the key exists but no known tracking SDKs are found, flag as "unnecessary ATT prompt"
+(P1), not as a missing string. Don't flag it as missing — it's present. Flag it as
+potentially causing rejection for prompting unnecessarily.
+
+**4. Firebase Analytics ≠ automatic rejection**
+Firebase Analytics collecting data is not a rejection by itself. It only becomes a problem
+if it's undisclosed in the privacy policy and App Privacy label. Flag as "needs disclosure"
+not as a hard rejection.
+
+**5. Staging URL might be intentional**
+Flag staging/dev URLs as ⚠️ with "confirm this isn't in your production build" — not as a
+guaranteed rejection. The developer may have a staging build and a production build config.
+Don't assume it's in the production binary without asking.
+
+**6. Location in startup ≠ always wrong**
+If the app's CORE purpose is location-based (e.g. a map app, a nearby listings app) and
+location is requested near startup, that's acceptable. Only flag if non-location features
+could work without it and location is still requested upfront.
+
+**7. No block feature ≠ reject for apps without chat**
+Only flag missing block user feature if the app has actual user-to-user interaction (chat,
+messaging, social profiles). A marketplace with listings but no direct user messaging does
+not need a block feature.
 
 ---
 
@@ -47,22 +129,18 @@ references guideline numbers.
 
 If mid-build signals detected → **pause and ask before continuing:**
 
-> "Your app looks like it might still be in progress — I'm seeing [specific signals found,
-> e.g. 'placeholder screens and stub functions']. Which would be more useful right now?
+> "Your app looks like it might still be in progress — I'm seeing [specific signals found].
+> Which would be more useful right now?
 >
-> **A) Submission audit** — I'll flag everything Apple would reject (assumes app is complete)
-> **B) Build checklist** — I'll tell you what to finish before worrying about submission
->
-> Which one?"
+> **A) Submission audit** — I'll flag everything Apple would reject
+> **B) Build checklist** — I'll tell you what to finish before worrying about submission"
 
-- If **A**: continue with full audit below, note mid-build state in executive summary
+- If **A**: continue with full audit, note mid-build state in executive summary
 - If **B**: run Build Checklist mode (see end of skill)
 
 ---
 
 ## Step 2 — Announce mode
-
-Say this before scanning anything:
 
 **Vibe coder:**
 > "Running in **plain English mode** — no jargon, copy-paste fixes.
@@ -96,7 +174,7 @@ files matching: `*auth*` `*account*` `*delete*` `*user*` `*block*` `*report*`
 
 ## Step 4 — What to look for
 
-For each area: collect issues silently. Output everything at once in Step 5.
+Collect issues silently. Output everything at once in Step 5.
 
 **Severity:**
 - 🚨 P0 — Apple will reject for this
@@ -115,7 +193,7 @@ Flag:
 - Key exists but no matching feature in code → ⚠️ over-requesting
 - `NSLocationAlwaysUsageDescription` without clear background need → ⚠️
 - Tracking SDK present but `NSUserTrackingUsageDescription` missing → 🚨
-- Tracking SDKs present but `PrivacyInfo.xcprivacy` missing or incomplete → ⚠️
+- `PrivacyInfo.xcprivacy` missing or incomplete when tracking SDKs present → ⚠️
 
 ---
 
@@ -147,14 +225,31 @@ Apple → 🚨 (required when any third-party login is offered)
 ### Payments & IAP
 Flag: Stripe/PayPal/custom for digital goods → 🚨 · credits unlocking digital features
 outside IAP → 🚨 · no restore purchases call found → ⚠️ · Apple EULA URL not in
-codebase → ⚠️ · external purchase links for digital features → 🚨
+codebase → ⚠️ · external purchase links for digital features → 🚨 ·
+subscription terms not shown before purchase → ⚠️
 
 ---
 
 ### Network config
 Flag: hardcoded IPv4 literals → 🚨 · `http://` in production config → 🚨 ·
-staging URLs in production build → ⚠️ · `NSAllowsArbitraryLoads: true` in
-Info.plist → ⚠️
+staging URLs in production build → ⚠️ · `NSAllowsArbitraryLoads: true` → ⚠️
+
+---
+
+### Encryption compliance
+Read `Info.plist` for `ITSAppUsesNonExemptEncryption`.
+
+Flag:
+- Key missing entirely → ⚠️ (Apple will ask during submission, blocks upload)
+- Set to `true` with no export compliance documentation → ⚠️
+
+**Vibe coder:** "Your app needs to declare whether it uses encryption. If you only
+use standard HTTPS (which most apps do), add this to your Info.plist:
+Tell Claude Code: 'Add ITSAppUsesNonExemptEncryption with value NO to Info.plist'"
+
+**Technical:** `ITSAppUsesNonExemptEncryption` missing from Info.plist.
+If app uses only HTTPS → set to `NO`. If custom encryption → set to `YES` and
+upload export compliance documentation in App Store Connect.
 
 ---
 
@@ -173,8 +268,44 @@ Read `pubspec.yaml` / `package.json`. Flag undisclosed data-collecting SDKs:
 ---
 
 ### Regulated content
-Scan user-visible strings. Flag medical claims ("treats", "cures", "clinically proven") → ⚠️ ·
-personalized financial advice → ⚠️ · safety/emergency features without disclaimers → ⚠️
+Scan user-visible strings. Flag: medical claims ("treats", "cures", "clinically proven") → ⚠️ ·
+personalized financial advice without disclaimers → ⚠️ · safety/emergency features
+without disclaimers → ⚠️
+
+---
+
+### ATT / tracking prompt
+Read `Info.plist` and `pubspec.yaml` / `package.json`.
+
+**Flag if:**
+- Tracking SDK present but `NSUserTrackingUsageDescription` missing → 🚨
+- `NSUserTrackingUsageDescription` present but vague → 🚨
+- `PrivacyInfo.xcprivacy` missing when tracking SDKs present → ⚠️
+- ATT requested at app launch before user has experienced any value → ⚠️
+- **`NSUserTrackingUsageDescription` present but NO tracking SDKs found** → ⚠️
+  (unnecessary ATT prompt — Apple rejects apps that ask for tracking without actually tracking)
+
+**Flutter:** ATT must use `app_tracking_transparency` package. Flag if tracking SDKs
+exist but this package is absent from `pubspec.yaml`.
+
+---
+
+### Web wrapper detection
+Flag: `webview_flutter` / `flutter_inappwebview` as primary UI with fewer than ~5 native
+screens → 🚨 · `WKWebView` loading external URL as entire app → 🚨 · all navigation
+inside WebView with no native nav → 🚨
+
+Not flagged: WebView used for a single supplemental feature alongside native functionality.
+
+---
+
+### 2025/2026 requirements
+Flag:
+- New age rating tiers: if app has UGC, chat, or advertising — old 12+ may now need 13+/16+
+  under January 2026 updated questionnaire → ⚠️ (note: verify in App Store Connect)
+- External AI consent: if app sends personal user data to an external AI service and no
+  consent modal found in code → ⚠️
+- Swift 6 (native only): ATT and StoreKit calls not marked `@MainActor` → 💡
 
 ---
 
@@ -186,25 +317,13 @@ Output all sections at once after the full scan.
 
 ### Language rules by mode
 
-Write every finding, fix, and recommendation in the correct voice:
+**Vibe coder:** Plain English. Explain what the thing is before saying it's wrong.
+Claude Code prompts specific to actual file and function found — not generic templates.
 
-**Vibe coder:** Plain English. No jargon. Explain what the thing is before saying it's wrong.
-Claude Code prompts must be specific to the actual file and actual code found — not generic.
+Format: `Tell Claude Code: "[specific instruction referencing actual file/function found]"`
 
-Format: `Tell Claude Code: "[specific instruction based on actual file/function found]"`
-
-Example — if `mailto:` deletion found in `lib/screens/settings_screen.dart`:
-> Tell Claude Code: "In settings_screen.dart, remove the mailto deletion button and replace
-> it with an in-app confirmation dialog. When the user confirms, call deleteUser() on both
-> Firebase Auth and Cognito, then navigate to the onboarding screen."
-
-Example — if vague location string found in `ios/Runner/Info.plist`:
-> Tell Claude Code: "In ios/Runner/Info.plist, update NSLocationWhenInUseUsageDescription
-> to say: 'Your location shows listings near you and displays your city on your profile.
-> Never shared without your consent.'"
-
-**Technical:** Dev terminology fine. Show exact code diffs referencing the actual file and
-line/function found. Guideline numbers where known.
+**Technical:** Dev terminology fine. Exact code diffs referencing actual file and line.
+Guideline numbers where known.
 
 ---
 
@@ -214,17 +333,17 @@ line/function found. Guideline numbers where known.
 [VIBE CODER]
 YOUR APP AUDIT
 ══════════════
-What your app does: [inferred from code — 1 sentence]
+What your app does: [inferred — 1 sentence]
 Issues found: [X] — [Y] will get you rejected, [Z] are risky
 
-The 3 biggest things to fix:
+3 biggest things to fix:
 • [top issue in plain English]
-• [second issue]
-• [third issue]
+• [second]
+• [third]
 
-3 quick wins (easy fixes):
+3 quick wins:
 • [easiest fix]
-• [second easiest]
+• [second]
 • [third]
 
 [TECHNICAL]
@@ -239,13 +358,13 @@ Top risks: [top 3] · Fast wins: [top 3]
 
 ### Section 2 — Risk register
 
-Use this table for both modes. Adapt language inside cells to detected mode.
-Omit rows with no issues. If no evidence found, write `Assumption — verify manually` in evidence cell.
+Both modes get this table. Adapt language in cells to detected mode.
+Omit rows with no issues. Use `Assumption — verify manually` when no code evidence.
 
 ```
 | Priority | Area | Finding | Evidence | Fix | Effort | Confidence |
 |----------|------|---------|----------|-----|--------|------------|
-| P0 🚨 | Permissions | NSLocationWhenInUseUsageDescription is generic | ios/Runner/Info.plist line 12 | [plain English or code diff] | S | High |
+| P0 🚨 | [area] | [finding] | [file:line or function] | [fix] | S/M/L | High/Med/Low |
 ```
 
 Effort: S = <1hr · M = half day · L = multi-day
@@ -254,35 +373,34 @@ Effort: S = <1hr · M = half day · L = multi-day
 
 ### Section 3 — Detailed findings
 
-Group by area. Only include areas with findings — skip clean areas entirely.
+Group by area. Skip clean areas entirely.
 
-Each finding:
-- **What I found** — specific file, function, or string (not general)
-- **Why Apple rejects it** — plain English (vibe) or guideline reference (technical)
-- **Fix** — vibe: plain English + specific Claude Code prompt · technical: code diff
+Each finding: what was found (specific file/function) · why Apple rejects it · exact fix
+Vibe: plain English + specific Claude Code prompt
+Technical: code diff
 
 ---
 
 ### Section 4 — Reviewer experience
 
-Simulate what an Apple reviewer does. Mark each:
+Simulate what Apple's reviewer does. Mark each:
 ✅ likely passes · ⚠️ risky · ❌ will fail · ⬜ can't determine from code
 
 ```
 Install & launch
-  [?] App installs and opens without crashing
+  [?] App opens without crashing
 
 First run
-  [?] Clear what the app does on first screen
+  [?] Clear what app does on first screen
   [?] Permissions explained before requested
   [?] No dead ends or blank screens
 
-Core feature access
-  [?] Reviewer can reach main features without special setup
+Core features
+  [?] Reviewer reaches main features without special setup
   [?] Test account path exists (if login required)
 
 Purchases (if applicable)
-  [?] Paywall shows price, billing cycle, and terms
+  [?] Paywall shows price, billing, terms
   [?] Restore purchases visible
   [?] No external payment links for digital features
 
@@ -291,12 +409,10 @@ Account (if applicable)
   [?] Account deletion findable and works in-app
 
 Links & legal
-  [?] Support URL loads
-  [?] Privacy policy loads
-  [?] Terms/EULA accessible
+  [?] Support URL loads · Privacy policy loads · EULA accessible
 
 Edge cases
-  [?] No internet → graceful error (not crash or blank)
+  [?] No internet → graceful error (not crash)
   [?] Empty states have UI
 ```
 
@@ -304,94 +420,123 @@ Edge cases
 
 ### Section 5 — Draft reviewer notes
 
-Generate ready-to-paste text for App Store Connect → App Information → Notes for App Review.
-Base every section on what was actually found in the code — no generic placeholders where
-the actual value can be inferred. Only use `[fill in]` where Claude genuinely can't know.
+Generate ready-to-paste text for App Store Connect → Notes for App Review.
+Infer every section from actual code. Only use `[fill in]` for things Claude can't know.
 
 ```
 --- NOTES FOR APP REVIEW ---
 
 ABOUT THIS APP
-[Inferred from code — what the app does, who it's for]
+[Inferred from code]
 
 TEST ACCOUNT
-Email:    [fill in before submitting]
-Password: [fill in before submitting]
+Email:    [fill in]
+Password: [fill in]
 
 HOW TO REACH KEY FEATURES
-[For each major flow inferred from code:]
-1. [Feature name]: [specific steps based on navigation structure found]
-2. [Feature name]: [specific steps]
-3. [If purchases]: Tap [inferred trigger] to reach the paywall.
-   Use sandbox environment to test purchases.
+[Steps inferred from navigation structure]
 
 PERMISSIONS
-[For each NS*UsageDescription found:]
-- [Permission]: Used for [feature name from usage string or inferred from code]
-[If location not requested on launch, note it explicitly]
+[Each NS*UsageDescription found — feature it's used for]
 
 ACCOUNT DELETION
-[If found]: Settings → [inferred path] → Delete Account.
-Confirmation required. Account removed from servers immediately.
-[If not found]: [omit this section]
+[Path inferred from code, or omit if not found]
 
-[Add any section explaining unusual capabilities, credits systems,
-or flows a reviewer might find confusing — based on what's in the code]
+[Any unusual flows, credits systems, or gated features]
 --- END NOTES ---
 ```
 
-*Vibe coder intro:* "Here's what to paste into the 'Notes for App Review' box in App Store
-Connect. It helps Apple's reviewer understand your app before they open it — fill in the
-test account and submit."
-
-*Technical intro:* "Draft App Review Notes — paste into App Store Connect → App Information
-→ Notes for App Review. Fill in test credentials before submitting."
-
 ---
 
-### Section 6 — Manual checklist
+### Section 6 — Manual checklist + 4 post-scan questions
+
+After the automated findings, end with this section.
 
 ```
 [VIBE CODER]
 THINGS TO CHECK YOURSELF
-(I can't see these from your code)
-══════════════════════════════════
+════════════════════════
 In App Store Connect:
-  □ Fill in the App Privacy section — what data your app collects
-  □ Age rating: 12+ if your app has chat, UGC, or location
-  □ All subscription plans in ONE group (not separate groups)
-  □ Add this link to your App Store description:
+  □ Fill in the App Privacy section
+  □ Age rating — updated tiers as of Jan 2026: check if your app
+    needs 13+ or 16+ (not just 12+) if it has chat, UGC, or ads
+  □ All subscription plans in ONE group
+  □ Add Apple's EULA link to your App Store description:
     apple.com/legal/internet-services/itunes/dev/stdeula/
 
 Your listing:
-  □ Description matches what's in the app right now
-  □ Screenshots show the current version (not old designs or Figma)
-  □ Support link opens and loads
-  □ Privacy policy link opens and loads
+  □ Description matches current build
+  □ Screenshots show the current version (not Figma)
+  □ Support link loads · Privacy policy link loads
 
 Before submitting:
-  □ Test on a real iPhone with the final build — not simulator
-  □ Open on an iPad — shouldn't crash
-  □ Paste your test account into the Review Notes above
+  □ Test on a real iPhone, final build — not simulator
+  □ Open on iPad — shouldn't crash
+  □ Paste test account into Review Notes
+
+Good to know:
+  □ Phased release — after approval you can roll out to
+    1% → 2% → 5% → 10% → 50% → 100% instead of everyone at once.
+    Great for catching issues before full launch.
+  □ Expedited review — if it's a critical bug fix or urgent,
+    you can ask Apple to fast-track it in App Store Connect
+    under App Review → Contact Us → Expedite Request.
 
 [TECHNICAL]
 MANUAL CHECKS — NOT IN CODE
 ════════════════════════════
 App Store Connect
   □ App Privacy nutrition label completed
-  □ Age rating 12+ (if UGC, chat, or location)
+  □ Age rating updated (Jan 2026 questionnaire — new 13+/16+/18+ tiers)
   □ All subscription tiers in single subscription group
   □ Apple EULA in App Store description
-    → apple.com/legal/internet-services/itunes/dev/stdeula/
+  □ ITSAppUsesNonExemptEncryption set in Info.plist
+  □ EU DSA trader status verified (if distributing paid app in EU)
 Metadata
-  □ Description matches current build
-  □ Screenshots match current build
+  □ Description matches current build · No prices in description
+  □ No "Also available on Android" references
+  □ Screenshots match current build (real UI, not marketing renders)
   □ Support URL resolves · Privacy policy URL live
 Device testing
   □ Physical device, release build · iPad doesn't crash
+  □ IPv6 network test (Apple review network is IPv6-only)
 Review Notes
   □ Demo credentials added · Reviewer notes draft pasted
+Useful options
+  □ Phased release available after approval (1%→2%→5%→10%→50%→100%)
+  □ Expedited review available for critical fixes (App Review → Contact Us)
 ```
+
+---
+
+**After the manual checklist, ask these 4 questions:**
+
+```
+[VIBE CODER]
+One last thing — a few things I can't check from your code:
+
+  1. Have you tested the app on a real iPhone recently?
+     (Not just the simulator)
+
+  2. Do your App Store screenshots show the current
+     version of your app?
+
+  3. Have you added a test account to your Review Notes?
+     (Skip this if your app doesn't require login)
+
+  4. Is this your first time submitting to the App Store?
+     (Say yes and I'll walk you through a setup checklist)
+
+[TECHNICAL]
+Four things I can't verify from code:
+
+  1. Tested on physical device with release build?
+  2. Screenshots in ASC match current build?
+  3. Demo credentials in App Review Notes? (skip if no login)
+  4. First submission? (yes → I'll load the first-time setup checklist)
+```
+
+If user answers yes to question 4 → load `references/first-time-dev.md`
 
 ---
 
@@ -399,44 +544,17 @@ Review Notes
 
 **Vibe coder:**
 > "[X] things to fix. Start with the 🚨 ones — guaranteed rejections.
-> Fill in your test account in the reviewer notes draft above, then paste it into
-> App Store Connect before you submit.
+> Answer the 4 questions above and fill in your test account in the reviewer
+> notes draft, then you're ready to submit.
 > *(Say "fix [anything]" and I'll write exactly what to tell Claude Code.)*"
 
 **Technical:**
-> "[X] issues. P0s first.
-> Reviewer notes draft above — fill credentials before submitting.
-> *(Say "fix [issue]" for the corrected code.)*"
+> "[X] issues. P0s first. Answer the 4 questions, fill reviewer notes credentials.
+> *(Say "fix [issue]" for corrected code.)*"
 
-**If zero issues:**
-> "No code-level issues found. Complete the reviewer notes draft and manual
-> checklist — you're good to submit."
-
----
-
-## Build checklist mode
-
-Run this instead of the full audit if the user chose option B after mid-build detection.
-
-Scan the codebase and output:
-
-```
-YOUR BUILD CHECKLIST
-════════════════════
-[What the app does so far — inferred from code]
-
-FINISH THESE FIRST (before worrying about submission)
-[List only the genuinely unfinished things found — stubs, TODOs,
-missing flows, placeholder screens. Specific file references.]
-
-ALREADY DONE ✅
-[List what's clearly implemented and working]
-
-WHEN YOU'RE DONE BUILDING
-Come back and say "audit my app" — I'll check it for App Store submission then.
-```
-
-Tone: encouraging, not alarming. No rejection warnings. Focus on what to build next.
+**If zero code issues:**
+> "No code-level issues found. Answer the 4 questions above and run through
+> the manual checklist — then you're good to submit."
 
 ---
 
@@ -444,6 +562,32 @@ Tone: encouraging, not alarming. No rejection warnings. Focus on what to build n
 
 If user says "I fixed [X]" or shares updated code:
 - Re-scan only that area
-- Use actual file/function found in the new code
 - Confirm ✅ or explain specifically what's still wrong
 - Update that item in the risk register only
+- Note: metadata rejection = fix in App Store Connect, no new build needed
+       binary rejection = fix code, create new archive, upload new build
+
+---
+
+## Build checklist mode
+
+Run if user chose option B after mid-build detection.
+
+```
+YOUR BUILD CHECKLIST
+════════════════════
+[What the app does so far — inferred from code]
+
+FINISH THESE FIRST
+[Unfinished things found — stubs, TODOs, missing flows.
+Specific file references.]
+
+ALREADY DONE ✅
+[What's clearly implemented and working]
+
+WHEN YOU'RE DONE BUILDING
+Come back and say "audit my app" — I'll check for
+App Store submission then.
+```
+
+Tone: encouraging. No rejection warnings. Focus on what to build next.
