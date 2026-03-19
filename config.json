@@ -11,26 +11,3 @@
   "issues_fixed": [],
   "issues_outstanding": []
 }
-```
-
-- Scroll down → **Commit changes** → **Commit directly to main** → confirm
-
----
-
-**Step 3 — Publish a new release with the updated .skill file**
-
-- In your repo, click **Releases** in the right sidebar
-- Click **Draft a new release**
-- Click **Choose a tag** → type `v1.1.0` → click **Create new tag**
-- Title: `v1.1 — Smarter triggering, config memory, false positive fixes`
-- In the description box paste:
-```
-What's new in v1.1:
-
-- Triggers automatically on 20+ phrases (submitting soon, got rejected, 
-  App Store Connect, TestFlight, about to launch, and more)
-- Config memory — remembers your stack and app type between sessions,
-  shows what you fixed since the last audit
-- 7 gotchas section — prevents common false positives like flagging 
-  Stripe for physical goods, WebView help screens, or Firebase Analytics
-  as hard rejections
